@@ -1,4 +1,8 @@
-# @meechi/core
+# @meechi-ai/core
+
+[![npm version](https://img.shields.io/npm/v/@meechi-ai/core.svg)](https://www.npmjs.com/package/@meechi-ai/core)
+[![license](https://img.shields.io/npm/l/@meechi-ai/core.svg)](https://github.com/luismichio/meechi-core/blob/master/LICENSE)
+
 
 The foundational AI & MCP engine for local-first applications.  
 This library powers the **Meechi** application, providing the core orchestration layer for Local LLMs, Model Context Protocol (MCP) servers, and Offline-First synchronization.
