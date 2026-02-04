@@ -1,0 +1,70 @@
+{
+  "name": "@meechi/core",
+  "version": "1.0.0",
+  "license": "AGPL-3.0-only",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "package.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "build:lib": "tsc -p tsconfig.lib.json",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@mlc-ai/web-llm": "^0.2.80",
+
+    "@tiptap/extension-bubble-menu": "^3.14.0",
+    "@tiptap/extension-color": "^3.14.0",
+    "@tiptap/extension-floating-menu": "^3.14.0",
+    "@tiptap/extension-highlight": "^3.14.0",
+    "@tiptap/extension-placeholder": "^3.14.0",
+    "@tiptap/extension-text-style": "^3.14.0",
+    "@tiptap/pm": "^3.14.0",
+    "@tiptap/react": "^3.14.0",
+    "@tiptap/starter-kit": "^3.14.0",
+
+    "cheerio": "1.0.0-rc.12",
+    "dexie": "^4.2.1",
+    "dexie-react-hooks": "^4.2.0",
+    "groq-sdk": "^0.37.0",
+    "idb": "^8.0.3",
+    "kokoro-js": "^1.2.1",
+    "lucide-react": "^0.469.0",
+    "next": "16.1.1",
+    "next-themes": "^0.4.6",
+
+    "pdfjs-dist": "4.9.155",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-markdown": "^10.1.0",
+    "tiptap-markdown": "^0.9.0",
+    "y-indexeddb": "^9.0.12",
+    "yjs": "^13.6.29"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "autoprefixer": "^10.0.1",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.3",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5"
+  }
+}

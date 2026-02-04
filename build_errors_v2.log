@@ -1,0 +1,26 @@
+src/components/FileExplorer.tsx(4,20): error TS2307: Cannot find module '../app/app/page.module.css' or its corresponding type declarations.
+src/components/SourceEditor.tsx(3,20): error TS2307: Cannot find module '@/app/app/page.module.css' or its corresponding type declarations.
+src/components/SourceEditor.tsx(186,38): error TS2304: Cannot find name 'Slice'.
+src/components/SourceEditor.tsx(187,52): error TS2304: Cannot find name 'Fragment'.
+src/components/SourceEditor.tsx(187,63): error TS2304: Cannot find name 'Fragment'.
+src/components/SourceEditor.tsx(189,39): error TS7006: Parameter 'node' implicitly has an 'any' type.
+src/components/SourceEditor.tsx(191,71): error TS7006: Parameter 'm' implicitly has an 'any' type.
+src/components/SourceEditor.tsx(198,28): error TS2552: Cannot find name 'Fragment'. Did you mean 'fragment'?
+src/components/SourceEditor.tsx(201,28): error TS2552: Cannot find name 'Slice'. Did you mean 'slice'?
+src/components/SourceEditor.tsx(416,45): error TS2304: Cannot find name 'commentsRef'.
+src/components/SourceEditor.tsx(416,70): error TS7006: Parameter 'c' implicitly has an 'any' type.
+src/components/SourceEditor.tsx(592,13): error TS2304: Cannot find name 'setSidebarIcons'.
+src/components/SourceEditor.tsx(747,32): error TS2552: Cannot find name 'comments'. Did you mean 'Comment'?
+src/components/SourceEditor.tsx(747,48): error TS7006: Parameter 'c' implicitly has an 'any' type.
+src/components/SourceEditor.tsx(748,9): error TS2304: Cannot find name 'setComments'.
+src/components/SourceEditor.tsx(771,83): error TS2552: Cannot find name 'comments'. Did you mean 'Comment'?
+src/components/SourceEditor.tsx(846,75): error TS2552: Cannot find name 'comments'. Did you mean 'Comment'?
+src/components/SourceEditor.tsx(1085,35): error TS2786: 'EditorContent' cannot be used as a JSX component.
+  Its type 'NamedExoticComponent<Omit<EditorContentProps, "ref"> & RefAttributes<HTMLDivElement>>' is not a valid JSX element type.
+    Type 'NamedExoticComponent<Omit<EditorContentProps, "ref"> & RefAttributes<HTMLDivElement>>' is not assignable to type '(props: any, deprecatedLegacyContext?: any) => ReactNode'.
+      Type 'import("C:/Users/luism/Workbench/GitHub/meechi/node_modules/@types/react/index").ReactNode' is not assignable to type 'React.ReactNode'.
+        Type 'bigint' is not assignable to type 'ReactNode'.
+src/components/SourceEditor.tsx(1153,20): error TS2322: Type '{ children: string; jsx: true; global: true; }' is not assignable to type 'DetailedHTMLProps<StyleHTMLAttributes<HTMLStyleElement>, HTMLStyleElement>'.
+  Property 'jsx' does not exist on type 'DetailedHTMLProps<StyleHTMLAttributes<HTMLStyleElement>, HTMLStyleElement>'.
+src/index.ts(26,10): error TS2305: Module '"./components/ThemeProvider"' has no exported member 'default'.
+src/index.ts(27,10): error TS2305: Module '"./components/ThemeSwitcher"' has no exported member 'default'.
