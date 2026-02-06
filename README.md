@@ -17,9 +17,9 @@ This library powers the **Meechi** application, providing the core orchestration
 ## Installation
 
 ```bash
-npm install @meechi/core
+npm install @meechi-ai/core
 # or
-yarn add @meechi/core
+yarn add @meechi-ai/core
 ```
 
 ## Usage
@@ -27,7 +27,7 @@ yarn add @meechi/core
 ### Basic AI Hook
 
 ```typescript
-import { useMeechi } from '@meechi/core';
+import { useMeechi } from '@meechi-ai/core';
 
 function App() {
   const { chat, isReady, localAIStatus } = useMeechi();
