@@ -1,5 +1,5 @@
 {
-  "name": "@meechi/core",
+  "name": "@meechi-ai/core",
   "version": "1.0.0",
   "license": "AGPL-3.0-only",
   "main": "dist/index.js",
@@ -27,7 +27,6 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@mlc-ai/web-llm": "^0.2.80",
-
     "@tiptap/extension-bubble-menu": "^3.14.0",
     "@tiptap/extension-color": "^3.14.0",
     "@tiptap/extension-floating-menu": "^3.14.0",
@@ -37,7 +36,7 @@
     "@tiptap/pm": "^3.14.0",
     "@tiptap/react": "^3.14.0",
     "@tiptap/starter-kit": "^3.14.0",
-
+    "@xenova/transformers": "^2.17.2",
     "cheerio": "1.0.0-rc.12",
     "dexie": "^4.2.1",
     "dexie-react-hooks": "^4.2.0",
@@ -47,7 +46,7 @@
     "lucide-react": "^0.469.0",
     "next": "16.1.1",
     "next-themes": "^0.4.6",
-
+    "onnxruntime-web": "^1.24.1",
     "pdfjs-dist": "4.9.155",
     "react": "19.2.3",
     "react-dom": "19.2.3",
