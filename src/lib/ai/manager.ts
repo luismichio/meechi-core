@@ -38,7 +38,7 @@ export class AIManager {
     ): Promise<AICompletion> {
         // 1. Determine Primary Provider
         const primaryId = config.activeProviderId || 'groq';
-        let providerConfig = config.providers.find(p => p.id === primaryId);
+        const providerConfig = config.providers.find(p => p.id === primaryId);
         
         let provider = this.providers.get(primaryId);
         

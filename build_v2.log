@@ -1,6 +1,0 @@
-src/components/SourceEditor.tsx(1615,35): error TS2786: 'EditorContent' cannot be used as a JSX component.
-  Its type 'NamedExoticComponent<Omit<EditorContentProps, "ref"> & RefAttributes<HTMLDivElement>>' is not a valid JSX element type.
-    Type 'NamedExoticComponent<Omit<EditorContentProps, "ref"> & RefAttributes<HTMLDivElement>>' is not assignable to type '(props: any, deprecatedLegacyContext?: any) => ReactNode'.
-      Type 'import("C:/Users/luism/Workbench/GitHub/meechi/node_modules/@types/react/index").ReactNode' is not assignable to type 'React.ReactNode'.
-        Type 'ReactElement<unknown, string | JSXElementConstructor<any>>' is not assignable to type 'ReactNode'.
-          Property 'children' is missing in type 'ReactElement<unknown, string | JSXElementConstructor<any>>' but required in type 'ReactPortal'.

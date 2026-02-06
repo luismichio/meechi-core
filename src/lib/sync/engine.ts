@@ -531,7 +531,7 @@ export class SyncEngine {
         const parentName = parts[parts.length - 2]; 
 
         // 1. Check local DB for Parent
-        let parent = await db.files.get(parentPath);
+        const parent = await db.files.get(parentPath);
 
         // 2. If parent has remoteId, we are good.
         if (parent?.remoteId) return parent.remoteId;

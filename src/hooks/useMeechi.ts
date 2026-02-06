@@ -209,7 +209,7 @@ export function useMeechi() {
         const backgroundMemories = mcpRegistry.getCombinedInstructions();
         let systemMsg = `${modePrompt}\n\n### ACTIVE MEMORY BACKGROUND\n${backgroundMemories}`;
 
-        let temp = mode === 'research' ? 0.3 : 0.7;
+        const temp = mode === 'research' ? 0.3 : 0.7;
 
         if (mode === 'research') {
              // Truncate Context to prevent OOM

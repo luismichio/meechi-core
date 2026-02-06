@@ -493,7 +493,7 @@ export class LocalStorageProvider implements StorageProvider {
 
                 // 1. Find matched files (by Name OR Tag)
                 // Use Dexie's index for tags if possible, or filter.
-                let taggedFiles: any[] = [];
+                const taggedFiles: any[] = [];
                 if (queryTags.length > 0) {
                      // OR logic for tags
                      const uniqueTags = Array.from(new Set(queryTags));

@@ -1,2 +1,0 @@
-src/auth.ts(4,26): error TS2742: The inferred type of 'auth' cannot be named without a reference to '../node_modules/next-auth/lib'. This is likely not portable. A type annotation is necessary.
-src/auth.ts(4,26): error TS2742: The inferred type of 'auth' cannot be named without a reference to '../node_modules/next-auth/lib/types'. This is likely not portable. A type annotation is necessary.
