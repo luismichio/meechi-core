@@ -1,6 +1,6 @@
 {
   "name": "@meechi-ai/core",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "license": "AGPL-3.0-only",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -22,7 +22,8 @@
     "build": "next build",
     "build:lib": "tsc -p tsconfig.lib.json",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "prepublishOnly": "npm run build:lib"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -40,6 +41,7 @@
     "cheerio": "1.0.0-rc.12",
     "dexie": "^4.2.1",
     "dexie-react-hooks": "^4.2.0",
+    "framer-motion": "^12.33.0",
     "groq-sdk": "^0.37.0",
     "idb": "^8.0.3",
     "kokoro-js": "^1.2.1",
