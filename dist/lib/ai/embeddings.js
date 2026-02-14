@@ -1,12 +1,9 @@
 'use client';
-
 // Web Worker Management for RAG
 // Isolating Transformers.js in a worker prevents environment crashes in Next.js/Turbopack
 import { gpuLock } from './gpu-lock';
-
 // Allow shorter timeouts during test runs to avoid long fake-timer advances.
 const EMBEDDING_TIMEOUT = process.env.NODE_ENV === 'test' ? 1000 : 30000;
-
 if (process.env.NODE_ENV === 'test') {
     // Prevent Vitest from failing the run due to timing-based test rejections
     process.on('unhandledRejection', (reason) => {
@@ -15,17 +12,15 @@ if (process.env.NODE_ENV === 'test') {
                 // swallow known test-timeout rejections coming from worker timeouts
                 return;
             }
-        } catch (e) {
+        }
+        catch (e) {
             // ignore errors in the handler
         }
     });
 }
-
-let worker: Worker | null = null;
-let terminateTimer: ReturnType<typeof setTimeout> | null = null;
-type PendingHandler = { resolve: (val: any) => void; reject: (err: any) => void; timer?: ReturnType<typeof setTimeout> };
-const pendingRequests = new Map<string, PendingHandler>();
-
+let worker = null;
+let terminateTimer = null;
+const pendingRequests = new Map();
 // Inline worker code as string (resolves library distribution issues)
 const workerCode = `
 let embedder = null;
@@ -71,7 +66,6 @@ self.onmessage = async (event) => {
     }
 };
 `;
-
 function terminateWorker() {
     if (worker) {
         console.log("[RAG] Auto-terminating worker to save resources...");
@@ -79,69 +73,64 @@ function terminateWorker() {
         worker = null;
     }
 }
-
 function getWorker() {
-    if (typeof window === 'undefined') return null;
-    
+    if (typeof window === 'undefined')
+        return null;
     // Reset timer on access
-    if (terminateTimer) clearTimeout(terminateTimer);
+    if (terminateTimer)
+        clearTimeout(terminateTimer);
     terminateTimer = setTimeout(terminateWorker, 30000); // 30s idle timeout
-
-    if (worker) return worker;
-
+    if (worker)
+        return worker;
     try {
         console.log("[RAG] Initializing AI Web Worker...");
         // Create worker from inline code (works in library distribution)
         const blob = new Blob([workerCode], { type: 'application/javascript' });
         const workerUrl = URL.createObjectURL(blob);
         worker = new Worker(workerUrl);
-
         worker.onmessage = (event) => {
             const { id, embedding, error } = event.data;
             const handler = pendingRequests.get(id);
-            if (!handler) return;
-
+            if (!handler)
+                return;
             // Clear timeout if set
-            if (handler.timer) clearTimeout(handler.timer);
+            if (handler.timer)
+                clearTimeout(handler.timer);
             pendingRequests.delete(id);
             if (error) {
                 handler.reject(new Error(error));
-            } else {
+            }
+            else {
                 handler.resolve(embedding);
             }
         };
-
         worker.onerror = (err) => {
             console.error("[RAG] Worker Error:", err);
             // If worker crashes, clear it so next retry spawns new one
             worker = null;
         };
-
         return worker;
-    } catch (e) {
+    }
+    catch (e) {
         console.error("[RAG] Failed to initialize worker:", e);
         return null;
     }
 }
-
 /**
  * Generates an embedding for a string of text.
  * Now offloads to a Web Worker to ensure stability and UI responsiveness.
  * PROTECTED BY GPU LOCK to prevent LLM/RAG collisions.
  */
-export async function generateEmbedding(text: string): Promise<number[]> {
+export async function generateEmbedding(text) {
     // 1. Acquire Lock (Waits if Chat is active)
     await gpuLock.acquire('RAG');
-
     try {
         const aiWorker = getWorker();
         if (!aiWorker) {
             throw new Error("RAG Worker not available (SSR or Init Failure)");
         }
-
         const id = Math.random().toString(36).substring(7);
-
-        const p = new Promise<number[]>((resolve, reject) => {
+        const p = new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
                 const h = pendingRequests.get(id);
                 if (h) {
@@ -149,43 +138,43 @@ export async function generateEmbedding(text: string): Promise<number[]> {
                     const doReject = () => h.reject(new Error("Embedding generation timed out"));
                     if (typeof process !== 'undefined' && typeof process.nextTick === 'function') {
                         process.nextTick(doReject);
-                    } else {
+                    }
+                    else {
                         setTimeout(doReject, 0);
                     }
                 }
             }, EMBEDDING_TIMEOUT);
-
             pendingRequests.set(id, { resolve, reject, timer });
             aiWorker.postMessage({ id, text });
         });
         // prevent unhandled-rejection warnings in the test harness while preserving behavior
-        p.catch(() => {});
+        p.catch(() => { });
         return await p;
-    } finally {
+    }
+    finally {
         // 2. Release Lock (Immediately allow Chat to resume)
         gpuLock.release();
     }
 }
-
 /**
  * Splits text into semantic chunks.
  * Standard Recursive Character splitting logic.
  */
-export function chunkText(text: string, maxChunkSize = 1000, overlap = 200): string[] {
-    if (!text) return [];
-    
+export function chunkText(text, maxChunkSize = 1000, overlap = 200) {
+    if (!text)
+        return [];
     // Split into paragraphs first
     const paragraphs = text.split(/\n\s*\n/);
-    const chunks: string[] = [];
+    const chunks = [];
     let currentChunk = "";
-
     for (const para of paragraphs) {
         if ((currentChunk.length + para.length) <= maxChunkSize) {
             currentChunk += (currentChunk ? "\n\n" : "") + para;
-        } else {
-            if (currentChunk) chunks.push(currentChunk);
+        }
+        else {
+            if (currentChunk)
+                chunks.push(currentChunk);
             currentChunk = para;
-            
             // If a single paragraph is still too big, hard cut it
             if (currentChunk.length > maxChunkSize) {
                 // ... (simplified cut for now)
@@ -195,15 +184,14 @@ export function chunkText(text: string, maxChunkSize = 1000, overlap = 200): str
             }
         }
     }
-    if (currentChunk) chunks.push(currentChunk);
-    
+    if (currentChunk)
+        chunks.push(currentChunk);
     return chunks;
 }
-
 /**
  * Calculates cosine similarity between two vectors.
  */
-export function cosineSimilarity(v1: number[], v2: number[]): number {
+export function cosineSimilarity(v1, v2) {
     let dotProduct = 0;
     let norm1 = 0;
     let norm2 = 0;

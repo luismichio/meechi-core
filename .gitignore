@@ -13,7 +13,7 @@ out/
 
 # Production
 build
-dist
+# dist
 
 # Environment
 .env
