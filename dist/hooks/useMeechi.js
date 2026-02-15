@@ -6,6 +6,9 @@ import { settingsManager } from '../lib/settings';
 import { SYSTEM_PROMPT } from '../lib/ai/prompts';
 import { mcpClient } from '../lib/mcp/McpClient';
 import { AVAILABLE_MODELS } from '../lib/ai/registry';
+import { detectDeviceCapabilities, getRecommendedModel, shouldWarnBeforeDownload } from '../lib/device/deviceDetection';
+import { modelConsentManager } from '../lib/consent/modelConsent';
+import { showLicenseModal } from '../lib/consent/showLicenseModal';
 import { parseToolCalls } from '../lib/ai/parsing';
 export function useMeechi() {
     const [isLowPowerDevice, setIsLowPowerDevice] = useState(true);
@@ -16,10 +19,10 @@ export function useMeechi() {
     const [activeMemories, setActiveMemories] = useState([]);
     const [mode, _setMode] = useState('chat'); // Default to simple chat
     const [isReady, setIsReady] = useState(false);
+    const [deviceCapabilities, setDeviceCapabilities] = useState(null);
     // Initialization Logic
     useEffect(() => {
         const init = async () => {
-            var _a, _b;
             const config = await settingsManager.getConfig();
             // Check Rate Limit Persisted
             const persisted = localStorage.getItem('meechi_rate_limit_cooldown');
@@ -61,33 +64,59 @@ export function useMeechi() {
             }
             if (!config.localAI.enabled)
                 return;
-            // Hardware Detection
+            // Device & Network Detection -> Smart Defaults
             try {
-                let gpuInfo = {};
-                if ('gpu' in navigator) {
-                    const adapter = await navigator.gpu.requestAdapter();
-                    if (adapter)
-                        gpuInfo = await ((_b = (_a = adapter).requestAdapterInfo) === null || _b === void 0 ? void 0 : _b.call(_a)) || {};
-                }
-                // Heuristic: Apple or RTX 30/40 series -> High Power
-                const isHighPower = gpuInfo.vendor === 'apple' ||
-                    /RTX (3090|4080|4090|A6000)/i.test(gpuInfo.renderer || "");
-                setIsLowPowerDevice(!isHighPower);
-                // Model Selection Logic via Registry
-                // Default: 1B for Low Power, 8B for High Power
-                const defaultLow = AVAILABLE_MODELS.local.find(m => m.low_power && m.family === 'llama').id;
-                // const defaultHigh = AVAILABLE_MODELS.find(m => !m.low_power && m.family === 'llama')!.id;
-                let modelId = defaultLow;
+                const capabilities = await detectDeviceCapabilities();
+                setDeviceCapabilities(capabilities);
+                // Keep low power heuristic as fallback
+                setIsLowPowerDevice(capabilities.isMobile || false);
+                const recommended = getRecommendedModel(capabilities);
+                let modelId = recommended;
                 const configModel = config.localAI.model;
-                if (!configModel || configModel === 'Auto') {
-                    // FORCE 1B Default (User Request: "Make the 1B the default")
-                    // We ignore high power detection for stability.
-                    modelId = defaultLow;
-                }
-                else {
-                    // Check if the configModel exists in registry, otherwise fallback
+                if (configModel && configModel !== 'Auto') {
                     const exists = AVAILABLE_MODELS.local.find(m => m.id === configModel);
                     modelId = exists ? exists.id : configModel;
+                }
+                // If user explicitly selected a model that requires consent, check stored consent
+                let selectedConfig = AVAILABLE_MODELS.local.find(m => m.id === modelId);
+                if ((selectedConfig === null || selectedConfig === void 0 ? void 0 : selectedConfig.preConsentRequired) && configModel && configModel !== 'Auto') {
+                    const has = modelConsentManager.hasConsent(modelId);
+                    if (!has) {
+                        // Prompt user for consent via modal. If accepted, persist consent; otherwise fallback to recommended.
+                        setLocalAIStatus(`Consent required for ${selectedConfig.name}`);
+                        setLoadedModel(null);
+                        try {
+                            const accepted = await showLicenseModal({
+                                modelId: selectedConfig.id,
+                                modelName: selectedConfig.name,
+                                license: selectedConfig.license,
+                                termsUrl: selectedConfig.termsUrl,
+                                estimatedDownloadMB: selectedConfig.estimatedDownloadMB
+                            });
+                            if (accepted) {
+                                modelConsentManager.setConsent(selectedConfig.id, selectedConfig.license || '');
+                                // proceed with this model
+                            }
+                            else {
+                                // fallback to recommended default
+                                modelId = recommended;
+                                setLocalAIStatus(`Falling back to ${recommended}`);
+                                setLoadedModel(recommended);
+                                // Update selectedConfig to reflect fallback model
+                                selectedConfig = AVAILABLE_MODELS.local.find(m => m.id === modelId) || selectedConfig;
+                            }
+                        }
+                        catch (e) {
+                            setLocalAIStatus(`Consent dialog failed`);
+                            return;
+                        }
+                    }
+                }
+                // If download would be warned (metered or large on mobile) and user didn't explicitly pick this model, block auto-init
+                if (shouldWarnBeforeDownload(selectedConfig === null || selectedConfig === void 0 ? void 0 : selectedConfig.estimatedDownloadMB, capabilities) && (!configModel || configModel === 'Auto')) {
+                    setLocalAIStatus(`Download blocked: large model on metered/low device`);
+                    setLoadedModel(null);
+                    return;
                 }
                 setLoadedModel(modelId);
                 // Initialize WebLLM

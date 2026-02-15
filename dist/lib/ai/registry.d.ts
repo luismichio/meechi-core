@@ -5,6 +5,10 @@ export interface ModelConfig {
     vram_required_mb: number;
     low_power: boolean;
     context_window: number;
+    license?: string;
+    termsUrl?: string;
+    preConsentRequired?: boolean;
+    estimatedDownloadMB?: number;
 }
 interface LocalModelConfig extends ModelConfig {
     id: string;
@@ -22,6 +26,7 @@ interface CloudModelConfig {
 export declare const AVAILABLE_MODELS: {
     local: LocalModelConfig[];
     groq: CloudModelConfig[];
+    openai: CloudModelConfig[];
     gemini: CloudModelConfig[];
 };
 export declare function getModelConfig(modelId: string): LocalModelConfig | undefined;
