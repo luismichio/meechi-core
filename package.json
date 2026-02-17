@@ -1,6 +1,6 @@
 {
   "name": "@meechi-ai/core",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "type": "module",
   "license": "AGPL-3.0-only",
   "main": "dist/index.js",

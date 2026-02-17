@@ -12,12 +12,12 @@ const DEFAULT_CONFIG = {
             model: 'llama-3.3-70b-versatile'
         }
     ],
-    activeProviderId: 'groq',
+    activeProviderId: 'local',
     localAI: {
         enabled: true,
         model: 'Llama-3.2-1B-Instruct-q4f16_1-MLC' // Default to 1B (Stable)
     },
-    theme: 'system',
+    theme: 'light',
     appearance: {
         fontFamily: 'Lora',
         accentColor: '#6B8E6B', // Sage
@@ -80,6 +80,11 @@ export class SettingsManager {
             config.activeProviderId = providerId;
             await this.saveConfig(config);
         }
+    }
+    async updateLocalAI(updates) {
+        const config = await this.getConfig();
+        config.localAI = Object.assign(Object.assign({}, config.localAI), updates);
+        await this.saveConfig(config);
     }
 }
 // Singleton helper for client-side usage if needed, 

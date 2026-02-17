@@ -44,5 +44,6 @@ export declare class SettingsManager {
     updateIdentity(identity: Partial<UserIdentity>): Promise<void>;
     updateProvider(providerId: string, updates: Partial<AIProviderConfig>): Promise<void>;
     setActiveProvider(providerId: string): Promise<void>;
+    updateLocalAI(updates: Partial<LocalAIConfig>): Promise<void>;
 }
 export declare const settingsManager: SettingsManager;
