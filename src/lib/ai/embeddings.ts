@@ -34,7 +34,8 @@ const EMBEDDING_MODEL = 'Xenova/all-MiniLM-L6-v2';
 async function loadLibrary() {
     if (self.transformers) return self.transformers;
     console.log("[RAG Worker] Loading Transformers.js from static vendor...");
-    const mod = await import('/vendor/transformers.js');
+    const vendorUrl = new URL('/vendor/transformers.js', self.location.origin).href;
+    const mod = await import(vendorUrl);
     return mod;
 }
 
@@ -188,10 +189,13 @@ export function chunkText(text: string, maxChunkSize = 1000, overlap = 200): str
             
             // If a single paragraph is still too big, hard cut it
             if (currentChunk.length > maxChunkSize) {
-                // ... (simplified cut for now)
+                // Cap overlap to avoid negative substring behavior.
+                // If requested overlap >= maxChunkSize, treat as no overlap (safe fallback).
+                const effectiveOverlap = overlap >= maxChunkSize ? 0 : overlap;
                 const sub = currentChunk.substring(0, maxChunkSize);
                 chunks.push(sub);
-                currentChunk = currentChunk.substring(maxChunkSize - overlap);
+                const start = Math.max(0, maxChunkSize - effectiveOverlap);
+                currentChunk = currentChunk.substring(start);
             }
         }
     }

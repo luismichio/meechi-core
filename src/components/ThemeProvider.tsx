@@ -67,8 +67,11 @@ export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
           }
       }
 
+      const normalizedAccent = appearance.accentColor ? appearance.accentColor.toLowerCase() : '';
+      const normalizedIgnored = IGNORED_DEFAULTS.map(d => d.toLowerCase());
+
       // Accent Color (OKLCH Engine)
-      if (appearance.accentColor && !IGNORED_DEFAULTS.includes(appearance.accentColor)) {
+      if (normalizedAccent && !normalizedIgnored.includes(normalizedAccent)) {
            const { l, c, h, cssValue } = getOklch(appearance.accentColor);
            root.style.setProperty('--accent', cssValue);
            // ... (rest of accent logic) ...
@@ -82,7 +85,8 @@ export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
       // Backgrounds & Surfaces
       // Helper to apply or clear
       const setOrClear = (prop: string, value: string) => {
-          if (value && !IGNORED_DEFAULTS.includes(value)) {
+          const normalizedValue = value ? value.toLowerCase() : '';
+          if (normalizedValue && !normalizedIgnored.includes(normalizedValue)) {
               root.style.setProperty(prop, value);
           } else {
               root.style.removeProperty(prop);

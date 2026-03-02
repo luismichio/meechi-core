@@ -1,4 +1,3 @@
-import Groq from "groq-sdk";
 import { AIProvider, AIChatMessage, AITool, AICompletion } from "../types";
 
 export class GroqProvider implements AIProvider {
@@ -20,12 +19,16 @@ export class GroqProvider implements AIProvider {
             throw new Error("Groq API Key is missing. Please set it in Settings or .env");
         }
 
-        const groq = new Groq({ apiKey });
-        
         console.log(`[Groq] Sending tools: ${tools?.map(t => t.function.name).join(', ') || 'None'}`);
 
         try {
-            const chatCompletion = await groq.chat.completions.create({
+            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`,
+                },
+                body: JSON.stringify({
                 messages: messages as any[],
                 model: model || "llama-3.3-70b-versatile",
                 temperature: 0.7,
@@ -35,7 +38,15 @@ export class GroqProvider implements AIProvider {
                 stop: null,
                 tools: tools as any[],
                 tool_choice: tools && tools.length > 0 ? "auto" : "none"
+                }),
             });
+
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(`HTTP ${response.status}: ${text}`);
+            }
+
+            const chatCompletion = await response.json() as any;
 
             const choice = chatCompletion.choices[0];
             const message = choice?.message;

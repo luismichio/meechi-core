@@ -1,7 +1,8 @@
 import { db, FileRecord } from '../storage/db';
 import { GoogleDriveClient } from './google-drive';
-import { extractTextFromPdf } from '../pdf';
 import { StorageProvider } from '../storage/types';
+import { handleRemoteChange } from './handlers/handleRemoteChange';
+import { DriveFile } from './types';
 
 const SYNC_TOKEN_KEY = 'drive_sync_token';
 // Changing root folder name to break legacy links and force fresh start
@@ -121,13 +122,16 @@ export class SyncEngine {
         
         // Clean up: Any local file that has a remoteId but WAS NOT seen in this pass
         // should be removed (as it no longer exists on Drive or moved out of scope).
-        onProgress?.("Cleaning ghost files...");
+        onProgress?.('Cleaning ghost files...');
         const localFiles = await db.files.toArray();
         let deletedCount = 0;
         for (const local of localFiles) {
+            // FIX (C2): Never delete a file that has unsaved local changes (dirty: 1).
+            // A dirty file means the user edited it locally and hasn't synced it yet.
+            // Deleting it would cause irreversible data loss.
             if (local.remoteId && !seenRemoteIds.has(local.remoteId) && !local.dirty) {
-                console.log(`[SyncDown] Cleaning orphaned/deleted file: ${local.path}`);
-                await db.files.delete(local.path);
+                console.log(`[SyncDown] Soft-deleting orphaned/deleted file: ${local.path}`);
+                await db.files.update(local.path, { deleted: 1, dirty: 1, remoteId: undefined });
                 deletedCount++;
             }
         }
@@ -149,212 +153,25 @@ export class SyncEngine {
     }
 
     private async handleRemoteDelete(fileId: string) {
-        // Find local file by remoteId
+        // FIX (C3): Changed from hard-delete to soft-delete.
+        // A remote deletion (or user moving a file out of Meechi-Core folder)
+        // should NOT immediately and permanently destroy local data.
+        // The file is soft-deleted and the remoteId link is broken so it can be reviewed.
         const localFile = await db.files.where('remoteId').equals(fileId).first();
         if (localFile) {
-            await db.files.delete(localFile.path);
-            console.log(`Deleted local file ${localFile.path} (remote delete)`);
+            await db.files.update(localFile.path, { deleted: 1, dirty: 1, remoteId: undefined });
+            console.log(`[SyncDown] Soft-deleted local file ${localFile.path} (remote delete - pending confirmation)`);
         }
     }
 
-    private async handleRemoteChange(driveFile: any, onProgress?: (msg: string) => void) {
-        // driveFile has id, name, mimeType, parents, modifiedTime, appProperties
-        const isFolder = driveFile.mimeType === 'application/vnd.google-apps.folder';
-        
-        // 1. Determine Local Path & VERIFY SCOPE
-        const parentId = driveFile.parents?.[0];
-        let parentPath = '';
-        const rootId = await this.getRootFolderId();
-
-        if (parentId) {
-            if (parentId === rootId) {
-                // Direct child of Meechi Journal -> OK
-                parentPath = ''; // Root relative
-            } else {
-                // Child of subfolder -> Check if we know the parent
-                const parentRecord = await db.files.where('remoteId').equals(parentId).first();
-                if (parentRecord) {
-                    parentPath = parentRecord.path;
-                } else {
-                    // UNKNOWN PARENT -> IGNORE
-                    return;
-                }
-            }
-        } else {
-            // No parent? Ignore.
-            return;
-        }
-
-        const path = parentPath ? `${parentPath}/${driveFile.name}` : driveFile.name;
-        
-        // 2. Download Content (if file)
-        let content = '';
-        if (!isFolder) {
-            const isText = driveFile.mimeType.startsWith('text/') || 
-                           driveFile.mimeType === 'application/json' || 
-                           driveFile.mimeType === 'application/javascript';
-            
-            const isPdf = driveFile.mimeType === 'application/pdf';
-
-
-
-            if (isText) {
-                 onProgress?.(`Downloading text ${path}...`);
-                 try {
-                     content = await this.drive.downloadFile(driveFile.id);
-                 } catch (e) {
-                     console.error(`Failed to download ${driveFile.name}`, e);
-                     onProgress?.(`Error downloading ${driveFile.name}`);
-                     return; 
-                 }
-            } else if (isPdf) {
-                // For PDFs, we DON'T put content in the PDF record.
-                // We create a "Shadow Source" file: [filename].source.md
-                onProgress?.(`Extracting PDF Source ${path}...`);
-                try {
-                    const binary = await this.drive.downloadBinary(driveFile.id);
-                    // Clone binary for extraction to avoid detachment issues if PDF.js transfers it
-                    const extractedText = await extractTextFromPdf(binary.slice(0));
-                    
-                    // Create/Update the Shadow Source File record
-                    const sourcePath = `${path}.source.md`; // e.g. misc/paper.pdf.source.md
-                    
-                    // Check if source exists to preserve any manual summary edits?
-                    // For now, we overwrite the text body but maybe keep a header?
-                    // Let's just overwrite for now to ensure accuracy.
-                    
-                    const sourceContent = `## Source: ${driveFile.name}\n\n${extractedText}`;
-
-                    await db.files.put({
-                        path: sourcePath,
-                        content: sourceContent,
-                        type: 'file',
-                        updatedAt: Date.now(),
-                        dirty: 1, // Mark as dirty so it syncs back up to Cloud!
-                        deleted: 0,
-                        tags: [],
-                        metadata: { isSource: true }
-                    });
-                    
-                    // Trigger semantic indexing for the newly created source
-                    this.storage.indexFile(sourcePath, sourceContent);
-
-                    // Update the actual PDF record with BINARY content (Local-First)
-                    const existingPdf = await db.files.get(path);
-                    await db.files.put({
-                        path: path,
-                        content: binary,
-                        updatedAt: new Date(driveFile.modifiedTime || Date.now()).getTime(),
-                        type: 'file',
-                        remoteId: driveFile.id,
-                        dirty: 0,
-                        deleted: 0,
-                        tags: existingPdf?.tags || [],
-                        metadata: existingPdf?.metadata || {}
-                    });
-
-                } catch (e) {
-                    console.error(`Failed to extra PDF ${driveFile.name}`, e);
-                    onProgress?.(`Error indexing PDF ${driveFile.name}`);
-                }
-                return; // CRITICAL: Return here to avoid overwriting the PDF record below with empty 'content' string
-            }
-        } else {
-            onProgress?.(`Syncing folder ${path}...`);
-        }
-
-        // 3. Determine Local Conflict / Movement
-        const localFile = await db.files.where('remoteId').equals(driveFile.id).first();
-        
-        // 3b. Extract Metadata from AppProperties
-        let remoteTags: string[] = [];
-        let remoteMetadata: any = {};
-        if (driveFile.appProperties?.meechi_meta) {
-            try {
-                const parsed = JSON.parse(driveFile.appProperties.meechi_meta);
-                remoteTags = parsed.tags || [];
-                remoteMetadata = parsed.metadata || {};
-            } catch (e) {
-                console.warn(`[SyncDown] Failed to parse meechi_meta for ${path}`, e);
-            }
-        }
-
-        let finalContent: string | Blob | ArrayBuffer = content;
-        let finalDirty = 0;
-        let finalUpdatedAt = new Date(driveFile.modifiedTime).getTime();
-        let finalTags = remoteTags;
-        let finalMetadata = remoteMetadata;
-
-        if (localFile) {
-            // Check if content matches (checksum) to avoid spurious writes
-            // Only verify checksum for STRING content. Binary diffing is expensive/complex.
-            if (localFile.remoteId === driveFile.id && typeof content === 'string' && typeof localFile.content === 'string') {
-                // Google drive doesn't provide MD5 for all files, but we can assume if timestamp differs we update anyway.
-                // For now, we rely on modifiedTime for non-dirty files.
-                // If remote modifiedTime is older or same as local, and local is not dirty, we can skip.
-                if (new Date(driveFile.modifiedTime).getTime() <= localFile.updatedAt && !localFile.dirty) {
-                    // Content is up-to-date or local is newer and not dirty, no need to update content.
-                    // We still proceed to check for path changes below.
-                    finalContent = localFile.content; // Keep existing local content
-                    finalUpdatedAt = localFile.updatedAt; // Keep existing local updated time
-                    finalTags = localFile.tags || [];
-                    finalMetadata = localFile.metadata || {};
-                }
-            }
-
-            // Keep local changes if dirty
-            if (localFile.dirty) {
-                finalContent = localFile.content;
-                finalDirty = 1;
-                finalUpdatedAt = localFile.updatedAt;
-                finalTags = localFile.tags || [];
-                finalMetadata = localFile.metadata || {};
-            }
-
-            // If path changed, remove old record
-            if (localFile.path !== path) {
-                console.log(`[SyncDown] Remote move detected: ${localFile.path} -> ${path}`);
-                
-                // If it's a folder, recursively move children too (safety)
-                if (localFile.type === 'folder') {
-                    const oldPrefix = localFile.path + '/';
-                    const newPrefix = path + '/';
-                    const children = await db.files.where('path').startsWith(oldPrefix).toArray();
-                    for (const child of children) {
-                        await db.files.delete(child.path);
-                        await db.files.put({
-                            ...child,
-                            path: child.path.replace(oldPrefix, newPrefix)
-                        });
-                    }
-                }
-                // When "moving" via delete+create, we must rely on 'localFile' variable to carry over metadata
-                // But wait, the final DB put below handles the PRIMARY file. 
-                // This block handles CHILDREN.
-                
-                await db.files.delete(localFile.path);
-            }
-        }
-
-        // 3. Update/Insert DB
-        // Preserve existing tags/metadata if updating
-        const existingRecord = await db.files.get(path);
-
-        await db.files.put({
-            path,
-            remoteId: driveFile.id,
-            type: isFolder ? 'folder' : 'file',
-            content: finalContent,
-            updatedAt: finalUpdatedAt,
-            dirty: finalDirty,
-            tags: finalTags,
-            metadata: finalMetadata
-        });
-
-        // Trigger semantic indexing for incoming files
-        if (typeof finalContent === 'string') {
-            this.storage.indexFile(path, finalContent);
-        }
+    private async handleRemoteChange(driveFile: DriveFile, onProgress?: (msg: string) => void) {
+        await handleRemoteChange(
+            driveFile,
+            this.drive,
+            this.storage,
+            this.getRootFolderId.bind(this),
+            onProgress
+        );
     }
 
 
@@ -414,7 +231,7 @@ export class SyncEngine {
                     
                     try {
                         const remoteFile = await this.drive.getFileMetadata(file.remoteId);
-                        const updates: any = {};
+                        const updates: Partial<DriveFile & { addParents?: string[], removeParents?: string[] }> = {};
                         
                         // Check Name
                         if (remoteFile.name !== name) {
@@ -491,7 +308,7 @@ export class SyncEngine {
         // Find remote (name = ROOT_FOLDER_NAME)
         // Issue: 'drive.readonly' scope lets us see folders we can't write to.
         // We must ensure we pick a folder we can write to.
-        const files: any[] = await this.drive.listFiles(`mimeType = 'application/vnd.google-apps.folder' and name = '${ROOT_FOLDER_NAME}' and trashed = false`);
+        const files: DriveFile[] = await this.drive.listFiles(`mimeType = 'application/vnd.google-apps.folder' and name = '${ROOT_FOLDER_NAME}' and trashed = false`);
         
         let rootId;
         const writableFolder = files.find(f => f.capabilities?.canAddChildren); // Ensure we have write access

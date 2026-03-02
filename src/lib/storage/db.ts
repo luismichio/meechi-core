@@ -1,17 +1,5 @@
 import Dexie, { Table } from 'dexie';
-
-export interface FileMetadata {
-    isSource?: boolean;
-    originalContent?: string;
-    summary?: string;
-    comments?: Array<{
-        id: string;
-        text: string;
-        range?: any; 
-        timestamp: number;
-    }>;
-    [key: string]: any;
-}
+import type { FileMetadata } from './types';
 
 export interface FileRecord {
     path: string; // Primary Key

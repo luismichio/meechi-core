@@ -303,7 +303,7 @@ export class LocalStorageProvider implements StorageProvider {
             const existing = await db.files.get(oldPath);
             if (!existing) throw new Error(`File not found: ${oldPath}`);
 
-            // 1. Rename the item itself
+            // 1. Rename the item itself (creates new instance)
             await db.files.put({
                 ...existing,
                 path: newPath,
@@ -311,7 +311,9 @@ export class LocalStorageProvider implements StorageProvider {
                 dirty: 1,
                 deleted: 0
             });
-            await db.files.delete(oldPath);
+            
+            // 1* - Soft delete the old item so sync adapter pushes deletion
+            await db.files.update(oldPath, { deleted: 1, dirty: 1 });
 
             // 1b. Migrate Chunks for this file
             await db.chunks.where('filePath').equals(oldPath).modify({ filePath: newPath });
@@ -333,8 +335,8 @@ export class LocalStorageProvider implements StorageProvider {
                         deleted: 0
                     });
                     
-                    // Delete old child record
-                    await db.files.delete(child.path);
+                    // Soft delete old child record
+                    await db.files.update(child.path, { deleted: 1, dirty: 1 });
 
                     // Migrate chunks for child
                     await db.chunks.where('filePath').equals(child.path).modify({ filePath: childNewPath });
@@ -431,8 +433,14 @@ export class LocalStorageProvider implements StorageProvider {
         console.log("Sync state reset. All files marked dirty.");
     }
 
-    async factoryReset() {
-        console.warn("PERFORMING FACTORY RESET...");
+    // FIX (H4): Require a typed confirmation string to prevent accidental calls.
+    // Usage: factoryReset('FACTORY_RESET')
+    async factoryReset(confirm?: string) {
+        if (confirm !== 'FACTORY_RESET') {
+            console.error('[Storage] factoryReset() called without confirmation. Aborting. Pass "FACTORY_RESET" as argument to proceed.');
+            return;
+        }
+        console.warn('PERFORMING FACTORY RESET...');
         await db.transaction('rw', db.files, db.settings, db.chunks, async () => {
             await db.files.clear();
             await db.settings.clear();
@@ -442,8 +450,10 @@ export class LocalStorageProvider implements StorageProvider {
         // Re-init default folders
         await this.ensureFolder('misc');
         await this.ensureFolder('history');
+        // Re-set sentinel since this is a deliberate reset
+        await db.settings.put({ key: 'db_initialized_at', value: Date.now() });
         
-        console.log("Factory Reset Complete.");
+        console.log('Factory Reset Complete.');
     }
 
     async forceSync() {

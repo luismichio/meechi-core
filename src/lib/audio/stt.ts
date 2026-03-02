@@ -18,8 +18,18 @@ export class TranscriberService {
     static async getInstance(): Promise<TranscriberPipeline> {
         if (!this.instance) {
             console.log(`Loading Metadata for ${this.modelId}...`);
-            // Dynamically import @xenova/transformers
-            const { pipeline, env } = await import('@xenova/transformers');
+
+            const transformersModuleName = '@xenova/transformers';
+            let transformersModule: any;
+
+            try {
+                transformersModule = await import(transformersModuleName);
+            } catch {
+                const browserFallback = 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+                transformersModule = await import(/* webpackIgnore: true */ browserFallback);
+            }
+
+            const { pipeline, env } = transformersModule;
             env.allowLocalModels = false; 
             env.useBrowserCache = true;
             

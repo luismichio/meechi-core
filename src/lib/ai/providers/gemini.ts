@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { AIProvider, AIChatMessage, AITool, AICompletion } from "../types";
 
 export class GeminiProvider implements AIProvider {
@@ -19,71 +18,86 @@ export class GeminiProvider implements AIProvider {
             throw new Error("Gemini API Key is missing. Please set it in Settings or .env");
         }
 
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const geminiModel = genAI.getGenerativeModel({ 
-            model: model || "gemini-flash-latest"
-        });
+        const targetModel = model || "gemini-1.5-flash";
 
-        // Gemini format conversion
-        // Note: Gemini has specific rules about System prompts (must be separate)
         let systemInstruction = "";
-        const history = [];
+        const convertedContents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
 
         for (const msg of messages) {
             if (msg.role === 'system') {
-                systemInstruction += msg.content + "\n";
-            } else if (msg.role === 'user') {
-                history.push({ role: 'user', parts: [{ text: msg.content }] });
-            } else if (msg.role === 'assistant') {
-                history.push({ role: 'model', parts: [{ text: msg.content }] });
+                systemInstruction += `${msg.content}\n`;
+                continue;
             }
+
+            convertedContents.push({
+                role: msg.role === 'assistant' ? 'model' : 'user',
+                parts: [{ text: msg.content }],
+            });
         }
 
-        // Configure generation config
-        const generationConfig = {
-            temperature: 0.7,
-            topK: 1,
-            topP: 1,
-            maxOutputTokens: 2048,
-        };
-        
-        // Map Tools to Gemini Format
-        const geminiTools = tools?.map(t => ({
-            functionDeclarations: [{
-                name: t.function.name,
-                description: t.function.description,
-                parameters: t.function.parameters
+        const geminiTools = tools?.length
+            ? [{
+                functionDeclarations: tools.map(t => ({
+                    name: t.function.name,
+                    description: t.function.description,
+                    parameters: t.function.parameters,
+                })),
             }]
-        }));
+            : undefined;
 
         try {
-            const chatSession = geminiModel.startChat({
-                history: history.slice(0, -1), // All but last
-                generationConfig,
-                systemInstruction: systemInstruction ? { role: 'system', parts: [{ text: systemInstruction }] } : undefined,
-                tools: geminiTools
-            });
+            const response = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        contents: convertedContents,
+                        generationConfig: {
+                            temperature: 0.7,
+                            topK: 1,
+                            topP: 1,
+                            maxOutputTokens: 2048,
+                        },
+                        ...(systemInstruction.trim()
+                            ? { systemInstruction: { parts: [{ text: systemInstruction.trim() }] } }
+                            : {}),
+                        ...(geminiTools ? { tools: geminiTools } : {}),
+                    }),
+                }
+            );
 
-            const lastMsg = history[history.length - 1];
-            const result = await chatSession.sendMessage(lastMsg.parts[0].text);
-            const response = await result.response;
-            
-            // Check for Function Calls
-            const functionCalls = response.functionCalls();
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(`HTTP ${response.status}: ${text}`);
+            }
+
+            const payload = await response.json() as any;
+            const candidate = payload?.candidates?.[0];
+            const parts = candidate?.content?.parts || [];
+            const functionCalls = parts
+                .map((part: any) => part?.functionCall)
+                .filter((entry: any) => !!entry);
+
             if (functionCalls && functionCalls.length > 0) {
                 return {
                     content: "",
                     tool_calls: functionCalls.map((fc: any) => ({
                         function: {
                             name: fc.name,
-                            arguments: JSON.stringify(fc.args)
+                            arguments: JSON.stringify(fc.args || {})
                         }
                     })),
                     usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
                 };
             }
 
-            const text = response.text();
+            const text = parts
+                .map((part: any) => part?.text)
+                .filter((entry: any) => typeof entry === 'string' && entry.length > 0)
+                .join('\n');
 
             return {
                 content: text,

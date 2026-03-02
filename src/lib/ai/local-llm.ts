@@ -11,6 +11,17 @@ export class WebLLMService {
     private progressListeners: ((text: string) => void)[] = [];
     private worker: Worker | null = null;
 
+    protected createWorker(): Worker {
+        const workerCode = `
+            import { WebWorkerMLCEngineHandler } from "@mlc-ai/web-llm";
+            const handler = new WebWorkerMLCEngineHandler();
+            self.onmessage = (msg) => { handler.onmessage(msg); };
+        `;
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        const workerUrl = URL.createObjectURL(blob);
+        return new Worker(workerUrl, { type: 'module' });
+    }
+
     /**
      * Connect to or Initialize the Engine via Web Worker
      */
@@ -77,15 +88,7 @@ export class WebLLMService {
                     safeContext = 2048;
                 }
 
-                // Create new Worker (Inline to avoid library distribution issues)
-                const workerCode = `
-                    import { WebWorkerMLCEngineHandler } from "@mlc-ai/web-llm";
-                    const handler = new WebWorkerMLCEngineHandler();
-                    self.onmessage = (msg) => { handler.onmessage(msg); };
-                `;
-                const blob = new Blob([workerCode], { type: 'application/javascript' });
-                const workerUrl = URL.createObjectURL(blob);
-                this.worker = new Worker(workerUrl, { type: 'module' });
+                this.worker = this.createWorker();
                 
                 this.engine = await CreateWebWorkerMLCEngine(this.worker, modelId, {
                     initProgressCallback: (progress) => {
@@ -98,6 +101,11 @@ export class WebLLMService {
                 this.currentModelId = modelId;
             } catch (error: any) {
                 console.error("Failed to initialize WebLLM:", error);
+
+                if (error.name === 'NetworkError' || error.message?.includes('Cache.add') || error.message?.includes('Failed to fetch')) {
+                    console.warn("[Meechi] WebLLM Network/Cache Error. This usually means the CDN is blocked or the connection is unstable.");
+                    throw new Error(`Model Download Failed: check internet connection. (${error.message})`);
+                }
                 
                 // FORCE RESET on error
                 if (this.engine) {
@@ -132,7 +140,7 @@ export class WebLLMService {
     async chat(
         messages: AIChatMessage[],
         onUpdate: (chunk: string) => void,
-        options: { tools?: AITool[]; temperature?: number; top_p?: number; stop?: string[] } = {}
+        options: { tools?: AITool[]; temperature?: number; top_p?: number; stop?: string[]; max_tokens?: number } = {}
     ): Promise<string> {
         if (!this.engine) {
             throw new Error("Local Engine not initialized");
@@ -151,6 +159,7 @@ export class WebLLMService {
                 temperature: options.temperature ?? 0.7, 
                 top_p: options.top_p ?? 0.9,
                 stop: options.stop,
+                max_tokens: options.max_tokens,
                 frequency_penalty: 0.1, // Slight penalty to prevent infinite loops "The user has asked..."
             });
 

@@ -31,7 +31,7 @@ export interface AppearanceConfig {
     iconLibrary: 'lucide' | 'material' | 'custom';
 }
 
-export interface AppConfig {
+export interface BaseAppConfig {
     identity: UserIdentity;
     providers: AIProviderConfig[];
     activeProviderId: string;
@@ -43,6 +43,8 @@ export interface AppConfig {
     };
     // Note: Desktop-specific config (like Ollama) is managed by the Meechi app, not Core.
 }
+
+export interface AppConfig extends BaseAppConfig {}
 
 const DEFAULT_CONFIG: AppConfig = {
     identity: {
@@ -65,7 +67,7 @@ const DEFAULT_CONFIG: AppConfig = {
     theme: 'light',
     appearance: {
         fontFamily: 'Lora',
-        accentColor: '#6B8E6B', // Sage
+        accentColor: '', // Let globals.css dictate the CSS variable
         // Colors left undefined to allow CSS variables (Light/Dark mode) to take precedence.
         // User can still override them in settings.
         radius: '0.5rem',

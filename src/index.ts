@@ -5,13 +5,16 @@ export * from './lib/mcp/types';
 export * from './lib/mcp/native';
 
 // Storage & Sync
+export * from './lib/storage/types';
 export * from './lib/storage/db';
 export * from './lib/storage/local';
 export * from './lib/yjs/store';
 export * from './lib/yjs/syncGraph';
 
 // AI Logic & Prompts
+export * from './lib/ai/types';
 export * from './lib/ai/embeddings';
+export * from './lib/ai/local-llm';
 export * from './lib/ai/prompts';
 export * from './lib/ai/registry'; // Needed?
 

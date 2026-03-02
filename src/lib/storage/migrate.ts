@@ -6,11 +6,13 @@ const OLD_DB_NAME = 'michio-local-v1';
 const OLD_STORE_NAME = 'files';
 
 export async function migrateFromIdbToDexie() {
-    // 1. Check if we already have data in Dexie
-    const count = await db.files.count();
-    
-    if (count > 0) {
-        // Already migrated
+    // GUARD: Check for the sentinel key to distinguish between:
+    // (a) New user: DB is empty, no sentinel -> run migration check.
+    // (b) Wipe recovery: DB is empty, but sentinel EXISTS -> data loss event, do NOT re-run migration.
+    const sentinel = await db.settings.get('db_initialized_at');
+    if (sentinel) {
+        // Sentinel exists: DB was previously initialized. If empty now, it was wiped.
+        // Do not silently re-migrate. Return and let the app handle recovery mode.
         return;
     }
 
@@ -24,11 +26,16 @@ export async function migrateFromIdbToDexie() {
         });
 
         if (!oldDb.objectStoreNames.contains(OLD_STORE_NAME)) {
+            // No old data found. This is a clean new user.
+            await db.settings.put({ key: 'db_initialized_at', value: Date.now() });
             return;
         }
 
         const allRecords = await oldDb.getAll(OLD_STORE_NAME);
-        if (allRecords.length === 0) return;
+        if (allRecords.length === 0) {
+            await db.settings.put({ key: 'db_initialized_at', value: Date.now() });
+            return;
+        }
 
         // 4. Transform & Insert
         const recordsToInsert: FileRecord[] = allRecords.map((rec: any) => ({
@@ -39,13 +46,16 @@ export async function migrateFromIdbToDexie() {
             type: 'file'
         }));
 
-
         // Use bulkPut to overwrite/merge
         await db.files.bulkPut(recordsToInsert);
+        // Set sentinel AFTER successful migration
+        await db.settings.put({ key: 'db_initialized_at', value: Date.now() });
         console.log(`[Meechi] Migrated ${recordsToInsert.length} files to new storage.`);
 
     } catch (e) {
         console.warn("Migration check failed (safe to ignore if new user)", e);
+        // Still set sentinel on error to prevent infinite retry loops
+        await db.settings.put({ key: 'db_initialized_at', value: Date.now() });
     }
 }
 
@@ -115,16 +125,12 @@ export async function migrateJournal() {
     if (count > 0) return;
 
     try {
-        // We just try to open it. If it doesn't exist, openDB might create it empty or fail?
-        // Actually IDB openDB will create if not exists. We should check if it has the store.
-        const guestDb = await openDB(GUEST_DB_NAME, 1, {
-            upgrade(db: any) {
-                // If it doesn't exist, we don't create stores here, we just want to read.
-                // But openDB with upgrade triggers creation.
-                // If we don't provide upgrade, and version matches, it opens.
-                // If we want to check existence safely:
-            }
-        });
+        // FIX (H5): Use Dexie.exists() to check before opening.
+        // openDB() creates the database if it doesn't exist, polluting the browser storage.
+        const guestDbExists = await Dexie.exists(GUEST_DB_NAME);
+        if (!guestDbExists) return;
+
+        const guestDb = await openDB(GUEST_DB_NAME);
         
         if (!guestDb.objectStoreNames.contains('journal')) {
             return;

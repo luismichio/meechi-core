@@ -30,6 +30,12 @@ interface CloudModelConfig {
     context_window: number;
 }
 
+const modelPromptOverrides: Record<string, string> = {};
+
+export function registerModelPromptOverrides(overrides: Record<string, string>): void {
+    Object.assign(modelPromptOverrides, overrides);
+}
+
 export const AVAILABLE_MODELS = {
     local: [
         // Ordered small -> large
@@ -217,10 +223,18 @@ export function getModelConfig(modelId: string): LocalModelConfig | undefined {
 
 // Factory for getting the right System Prompt based on Model Family
 export function getSystemPromptForModel(modelId: string): string {
+    const modelOverride = modelPromptOverrides[modelId];
+    if (modelOverride) {
+        return modelOverride;
+    }
+
     const config = getModelConfig(modelId);
     if (!config) return SYSTEM_PROMPT; // Default
 
-    // We can specialize prompts here if needed in the future
-    // For now, Llama family works well with the default XML prompt
-    return SYSTEM_PROMPT;
+    switch (config.family) {
+        case 'phi':
+            return 'You are a helpful AI assistant.';
+        default:
+            return SYSTEM_PROMPT;
+    }
 }
