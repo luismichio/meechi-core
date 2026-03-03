@@ -14,35 +14,56 @@ interface IconProps extends React.SVGProps<SVGSVGElement> {
 }
 
 export default function Icon({ name, size = 16, className, color, ...props }: IconProps) {
-    const [library, setLibrary] = React.useState<'lucide' | 'material' | 'custom'>('lucide');
+    const [library, setLibrary] = React.useState<'default' | 'bold' | 'thin'>('default');
 
     React.useEffect(() => {
         async function load() {
            const cfg = await settingsManager.getConfig();
-           setLibrary(cfg.appearance?.iconLibrary || 'lucide');
+           const lib = cfg.appearance?.iconLibrary as string | undefined;
+           if (lib === 'default' || lib === 'bold' || lib === 'thin') {
+               setLibrary(lib);
+           } else {
+               setLibrary('default');
+           }
         }
-        // load(); 
+        load(); 
     }, []);
 
     // Normalize Name (e.g. "search" -> "Search", "file-text" -> "FileText")
     // Lucide exports PascalCase.
     const pascalName = name.split(/[-_]/).map(part => part.charAt(0).toUpperCase() + part.slice(1)).join('');
     
-    if (library === 'lucide') {
-        const LucideIcon = (LucideIcons as any)[pascalName] || (LucideIcons as any)[name];
-        
-        if (!LucideIcon) {
-            console.warn(`Icon not found: ${name} (${pascalName})`);
-            return <span style={{ width: size, height: size, display: 'inline-block', background: '#ccc' }} />;
-        }
-        
-        // LucideIcon accepts LucideProps which are compatible with SVGProps
-        return <LucideIcon size={size} className={className} color={color} {...props} />;
+    const LucideIcon = (LucideIcons as any)[pascalName] || (LucideIcons as any)[name];
+            
+    if (!LucideIcon) {
+        console.warn(`Icon not found: ${name} (${pascalName})`);
+        return <span style={{ width: size, height: size, display: 'inline-block', background: '#ccc' }} />;
     }
 
-    if (library === 'material') {
-        return <span>M-{name}</span>; // Placeholder
+    if (library === 'bold') {
+        return <LucideIcon 
+            size={size} 
+            className={className} 
+            color={color} 
+            strokeWidth={2.8} 
+            strokeLinejoin="round" 
+            strokeLinecap="round"
+            {...props} 
+        />;
     }
 
-    return null;
+    if (library === 'thin') {
+        return <LucideIcon 
+            size={size} 
+            className={className} 
+            color={color} 
+            strokeWidth={0.75} 
+            strokeLinejoin="round" 
+            strokeLinecap="round"
+            {...props} 
+        />;
+    }
+
+    // Default Lucide
+    return <LucideIcon size={size} className={className} color={color} {...props} />;
 }

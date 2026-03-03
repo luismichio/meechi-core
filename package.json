@@ -19,7 +19,7 @@
   ],
   "scripts": {
     "dev": "next dev",
-    "prebuild": "node scripts/guard-architecture.js",
+    "prebuild": "node ../../scripts/guard-architecture.js",
     "build": "next build",
     "build:lib": "tsc -p tsconfig.lib.json",
     "start": "next start",
