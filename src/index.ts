@@ -25,6 +25,9 @@ export * from './hooks/useMeechi';
 export * from './lib/settings';
 export * from './lib/extensions';
 
+// Color utilities
+export * from './utils/color-engine';
+
 // Note: UI Components (SourceEditor, FileExplorer, etc.) are excluded from the
 // Core library build because they depend on application-specific CSS.
 // Consumers should import these directly from their own app.

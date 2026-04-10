@@ -59,7 +59,7 @@ export class GeminiProvider implements AIProvider {
                             temperature: 0.7,
                             topK: 1,
                             topP: 1,
-                            maxOutputTokens: 2048,
+                            maxOutputTokens: 4096,
                         },
                         ...(systemInstruction.trim()
                             ? { systemInstruction: { parts: [{ text: systemInstruction.trim() }] } }

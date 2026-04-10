@@ -68,7 +68,7 @@ export interface StorageProvider {
     /**
      * Collect relevant context for the AI from the local knowledge base.
      */
-    getKnowledgeContext(query?: string): Promise<string>;
+    getKnowledgeContext(query?: string, options?: { updatedAfter?: number }): Promise<string>;
 
     /**
      * Re-index a file for semantic search.

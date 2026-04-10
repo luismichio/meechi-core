@@ -41,6 +41,10 @@ export interface BaseAppConfig {
     storage: {
         primarySync: string; // 'local' | 'folder' | 'gdrive' | 'onedrive'
     };
+    search: {
+        searxngUrl: string;
+        readerMode: 'local' | 'cloud';
+    };
     // Note: Desktop-specific config (like Ollama) is managed by the Meechi app, not Core.
 }
 
@@ -57,24 +61,32 @@ const DEFAULT_CONFIG: AppConfig = {
             name: 'Groq',
             enabled: true,
             model: 'llama-3.3-70b-versatile'
+        },
+        {
+            id: 'llama_hub',
+            name: 'Llama Hub',
+            enabled: true,
+            model: 'Llama-3.2-3B'
         }
     ],
     activeProviderId: 'local',
     localAI: {
         enabled: true,
-        model: 'Llama-3.2-1B-Instruct-q4f16_1-MLC' // Default to 1B (Stable)
+        model: 'Llama-3.2-3B-Instruct-q4f16_1-MLC'
     },
     theme: 'light',
     appearance: {
         fontFamily: 'Lora',
         accentColor: '', // Let globals.css dictate the CSS variable
-        // Colors left undefined to allow CSS variables (Light/Dark mode) to take precedence.
-        // User can still override them in settings.
         radius: '0.5rem',
         iconLibrary: 'default'
     },
     storage: {
         primarySync: 'local'
+    },
+    search: {
+        searxngUrl: 'https://searx.be',
+        readerMode: 'local'
     }
 };
 
@@ -99,7 +111,8 @@ export class SettingsManager {
                 ...DEFAULT_CONFIG, 
                 ...parsed, 
                 identity: { ...DEFAULT_CONFIG.identity, ...parsed.identity },
-                localAI: { ...DEFAULT_CONFIG.localAI, ...parsed.localAI } 
+                localAI: { ...DEFAULT_CONFIG.localAI, ...parsed.localAI },
+                search: { ...DEFAULT_CONFIG.search, ...parsed.search }
             };
         } catch (e) {
             console.warn("Failed to load config, returning default", e);

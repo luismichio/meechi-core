@@ -12,7 +12,7 @@ export interface McpConnector {
     getTools(): Promise<McpTool[]>;
     getResources?(): Promise<McpResource[]>;
     executeTool(name: string, args: any): Promise<any>;
-    getSystemInstructions?(): Promise<string>; // Persona injection (Async for memory lookup)
+    getSystemInstructions?(options?: { lite?: boolean }): Promise<string>; // Persona injection (Async for memory lookup)
 }
 
 export type MeechiTier = 'tier1' | 'tier2' | 'tier3';
@@ -117,13 +117,17 @@ export class McpRegistry {
         throw new Error(`Tool ${name} not found in any active MCP slots.`);
     }
 
-    async getCombinedInstructions(): Promise<string> {
+    async getCombinedInstructions(options?: { lite?: boolean }): Promise<string> {
         let instructions = "";
         for (const serverId of this.activeMemories) {
             const server = this.servers.get(serverId);
-            if (server?.getSystemInstructions) {
-                const instructionsText = await server.getSystemInstructions();
-                instructions += `\n\n--- PERSONA: ${server.name} ---\n${instructionsText}\n`;
+            if (server) {
+                if (options?.lite) {
+                    instructions += `\n- ${server.name}: ${server.description}`;
+                } else if (server.getSystemInstructions) {
+                    const instructionsText = await server.getSystemInstructions(options);
+                    instructions += `\n\n--- PERSONA: ${server.name} ---\n${instructionsText}\n`;
+                }
             }
         }
         return instructions;
@@ -132,9 +136,11 @@ export class McpRegistry {
     /**
      * Gets instructions for a SPECIFIC agent (e.g. for Mode switching)
      */
-    async getAgentInstructions(agentId: string): Promise<string | null> {
+    async getAgentInstructions(agentId: string, options?: { lite?: boolean }): Promise<string | null> {
         const server = this.servers.get(agentId);
-        return server?.getSystemInstructions ? await server.getSystemInstructions() : null;
+        if (!server) return null;
+        if (options?.lite) return `${server.name}: ${server.description}`;
+        return server.getSystemInstructions ? await server.getSystemInstructions(options) : null;
     }
 
     getMarketplace() {

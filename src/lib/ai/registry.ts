@@ -205,9 +205,13 @@ export const AVAILABLE_MODELS = {
     ] as CloudModelConfig[],
 
     openai: [
+        // Common stable models (kept conservative)
         { id: 'gpt-4o-mini', name: 'GPT-4o Mini', context_window: 32768 },
         { id: 'gpt-4o', name: 'GPT-4o', context_window: 131072 },
-        { id: 'gpt-4o-realtime-preview', name: 'GPT-4o Realtime (Preview)', context_window: 32768 }
+        { id: 'gpt-4o-realtime-preview', name: 'GPT-4o Realtime (Preview)', context_window: 32768 },
+        { id: 'gpt-4', name: 'GPT-4', context_window: 8192 },
+        { id: 'gpt-4-32k', name: 'GPT-4 (32k)', context_window: 32768 },
+        { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', context_window: 4096 }
     ] as CloudModelConfig[],
 
     gemini: [
@@ -221,7 +225,6 @@ export function getModelConfig(modelId: string): LocalModelConfig | undefined {
     return AVAILABLE_MODELS.local.find(m => m.id === modelId);
 }
 
-// Factory for getting the right System Prompt based on Model Family
 export function getSystemPromptForModel(modelId: string): string {
     const modelOverride = modelPromptOverrides[modelId];
     if (modelOverride) {
@@ -237,4 +240,35 @@ export function getSystemPromptForModel(modelId: string): string {
         default:
             return SYSTEM_PROMPT;
     }
+}
+
+/**
+ * Returns the context window for any model ID, searching across all provider lists.
+ * Falls back to a conservative 4096 if the model is not found.
+ */
+export function getModelContextWindow(modelId: string): number {
+    const allModels = [
+        ...AVAILABLE_MODELS.local,
+        ...AVAILABLE_MODELS.groq,
+        ...AVAILABLE_MODELS.openai,
+        ...AVAILABLE_MODELS.gemini,
+    ];
+    return allModels.find(m => m.id === modelId)?.context_window ?? 4096;
+}
+
+/**
+ * Computes the maximum number of history messages to include in a prompt,
+ * based on the model's context window. Larger windows = more context.
+ *
+ * Reserves ~2048 tokens for system prompt + current user message + model output.
+ * Assumes ~256 tokens per average message as a conservative estimate.
+ */
+export function getMaxHistoryMessages(modelId: string): number {
+    const contextWindow = getModelContextWindow(modelId);
+    const RESERVED_TOKENS = 2048;
+    const AVG_TOKENS_PER_MSG = 256;
+    const available = contextWindow - RESERVED_TOKENS;
+    const computed = Math.floor(available / AVG_TOKENS_PER_MSG);
+    // Clamp: min 4 messages, max 40 messages (practical ceiling for coherence)
+    return Math.min(40, Math.max(4, computed));
 }

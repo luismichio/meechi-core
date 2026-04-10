@@ -174,33 +174,156 @@ export async function generateEmbedding(text: string): Promise<number[]> {
  */
 export function chunkText(text: string, maxChunkSize = 1000, overlap = 200): string[] {
     if (!text) return [];
-    
-    // Split into paragraphs first
-    const paragraphs = text.split(/\n\s*\n/);
-    const chunks: string[] = [];
-    let currentChunk = "";
 
-    for (const para of paragraphs) {
-        if ((currentChunk.length + para.length) <= maxChunkSize) {
-            currentChunk += (currentChunk ? "\n\n" : "") + para;
-        } else {
-            if (currentChunk) chunks.push(currentChunk);
-            currentChunk = para;
-            
-            // If a single paragraph is still too big, hard cut it
-            if (currentChunk.length > maxChunkSize) {
-                // Cap overlap to avoid negative substring behavior.
-                // If requested overlap >= maxChunkSize, treat as no overlap (safe fallback).
-                const effectiveOverlap = overlap >= maxChunkSize ? 0 : overlap;
-                const sub = currentChunk.substring(0, maxChunkSize);
-                chunks.push(sub);
-                const start = Math.max(0, maxChunkSize - effectiveOverlap);
-                currentChunk = currentChunk.substring(start);
+    const effectiveOverlap = overlap >= maxChunkSize ? 0 : overlap;
+
+    // --- Phase 1: Split by Markdown headings (H1/H2) ---
+    // A heading line starts with one or two '#' characters followed by a space.
+    // We keep the heading as the first line of each section so context is preserved.
+    const headingRegex = /^(#{1,2} .+)$/m;
+    const rawSections: string[] = [];
+    let remaining = text;
+
+    while (remaining.length > 0) {
+        const match = headingRegex.exec(remaining);
+        if (!match || match.index === 0) {
+            // No heading found ahead, or we ARE at a heading — consume until the next one
+            const nextMatch = match ? headingRegex.exec(remaining.slice(1)) : null;
+            if (nextMatch) {
+                rawSections.push(remaining.slice(0, nextMatch.index + 1));
+                remaining = remaining.slice(nextMatch.index + 1);
+            } else {
+                rawSections.push(remaining);
+                break;
             }
+        } else {
+            // Text before the first heading — treat as its own section
+            rawSections.push(remaining.slice(0, match.index));
+            remaining = remaining.slice(match.index);
         }
     }
-    if (currentChunk) chunks.push(currentChunk);
-    
+
+    const chunks: string[] = [];
+
+    const pushChunk = (s: string) => {
+        const trimmed = s.trim();
+        if (trimmed.length > 0) chunks.push(trimmed);
+    };
+
+    const splitSection = (section: string) => {
+        // Identify the header if this section starts with one
+        const lines = section.split('\n');
+        const firstLine = lines[0] || '';
+        const sectionHeader = headingRegex.test(firstLine) ? firstLine : '';
+        const headerPrefix = sectionHeader ? `${sectionHeader}\n\n` : '';
+
+        if (section.length <= maxChunkSize) {
+            pushChunk(section);
+            return;
+        }
+
+        // --- Phase 2: Within a large section, split by paragraphs ---
+        // Preserve code fences as atomic units — never split inside them.
+        let currentChunk = '';
+        let inCodeFence = false;
+        let codeFenceBuffer = '';
+
+        for (const line of lines) {
+            const isFenceMarker = /^```/.test(line);
+
+            if (isFenceMarker) {
+                if (!inCodeFence) {
+                    // Opening fence — flush pending paragraph text first
+                    if (currentChunk.trim()) {
+                        if ((currentChunk + '\n' + line).length > maxChunkSize) {
+                            pushChunk(currentChunk);
+                            // New sub-chunk starts with the header prefix for context
+                            currentChunk = headerPrefix;
+                        }
+                    }
+                    inCodeFence = true;
+                    codeFenceBuffer = line;
+                } else {
+                    // Closing fence — finalize code block
+                    codeFenceBuffer += '\n' + line;
+                    inCodeFence = false;
+
+                    // Append code block to current chunk or push standalone
+                    if ((currentChunk + '\n' + codeFenceBuffer).length <= maxChunkSize) {
+                        currentChunk += (currentChunk ? '\n' : '') + codeFenceBuffer;
+                    } else {
+                        if (currentChunk.trim()) pushChunk(currentChunk);
+                        // Code fence itself too big? hard-cut it.
+                        if (codeFenceBuffer.length > maxChunkSize) {
+                            let start = 0;
+                            while (start < codeFenceBuffer.length) {
+                                pushChunk(headerPrefix + codeFenceBuffer.slice(start, start + maxChunkSize));
+                                start += maxChunkSize - effectiveOverlap;
+                            }
+                            currentChunk = headerPrefix;
+                        } else {
+                            currentChunk = headerPrefix + codeFenceBuffer;
+                        }
+                    }
+                    codeFenceBuffer = '';
+                }
+                continue;
+            }
+
+            if (inCodeFence) {
+                codeFenceBuffer += '\n' + line;
+                continue;
+            }
+
+            // Blank line = paragraph boundary
+            if (line.trim() === '') {
+                if (currentChunk.trim()) {
+                    if (currentChunk.length > maxChunkSize) {
+                        // Hard-cut oversized paragraph
+                        let start = 0;
+                        while (start < currentChunk.length) {
+                            pushChunk(currentChunk.slice(start, start + maxChunkSize));
+                            start += maxChunkSize - effectiveOverlap;
+                        }
+                        currentChunk = headerPrefix;
+                    } else {
+                        // Try to accumulate — will flush on next para if needed
+                    }
+                }
+                currentChunk += (currentChunk ? '\n\n' : '');
+                continue;
+            }
+
+            const separator = currentChunk.trimEnd() ? '\n' : '';
+            const candidate = currentChunk + separator + line;
+            if (candidate.length > maxChunkSize && currentChunk.trim()) {
+                pushChunk(currentChunk);
+                // Carry overlap: take the tail of the flushed chunk
+                const tail = currentChunk.slice(Math.max(0, currentChunk.length - effectiveOverlap));
+                // Ensure new chunk still starts with header for context if it was flushed
+                currentChunk = headerPrefix + tail + (tail ? '\n' : '') + line;
+            } else if (candidate.length > maxChunkSize) {
+                // currentChunk is empty but the single line itself exceeds the limit — hard-cut it
+                let start = 0;
+                while (start < line.length) {
+                    pushChunk(headerPrefix + line.slice(start, start + maxChunkSize));
+                    start += maxChunkSize - effectiveOverlap;
+                }
+                currentChunk = headerPrefix;
+            } else {
+                currentChunk = candidate;
+            }
+        }
+
+        // Unclosed code fence — flush as-is
+        if (inCodeFence && codeFenceBuffer.trim()) pushChunk(headerPrefix + codeFenceBuffer);
+        if (currentChunk.trim() && currentChunk !== headerPrefix) pushChunk(currentChunk);
+    };
+
+    for (const section of rawSections) {
+        splitSection(section);
+    }
+
     return chunks;
 }
 
@@ -216,5 +339,7 @@ export function cosineSimilarity(v1: number[], v2: number[]): number {
         norm1 += v1[i] * v1[i];
         norm2 += v2[i] * v2[i];
     }
-    return dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2));
+    const denominator = (Math.sqrt(norm1) * Math.sqrt(norm2));
+    if (denominator === 0) return 0;
+    return dotProduct / denominator;
 }

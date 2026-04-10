@@ -23,35 +23,37 @@ export class LocalStorageProvider implements StorageProvider {
 
         try {
             console.log(`[RAG] Indexing ${path}...`);
-            // 2. Fetch metadata to include comments in indexing
+            // Fetch metadata to include comments in indexing
             const file = await db.files.get(path);
             const comments = file?.metadata?.comments || [];
-            
+            const fileUpdatedAt = file?.updatedAt ?? Date.now();
+
             let fullText = content;
             if (comments.length > 0) {
                 const commentText = comments
-                    .filter((c: any) => c.text?.trim()) // Only include non-empty comments
+                    .filter((c: any) => c.text?.trim())
                     .map((c: any) => c.text)
                     .join('\n');
-                
+
                 if (commentText) {
                     fullText += "\n\n### User Notes & Comments\n" + commentText;
                 }
             }
 
-            // 4. Clear old chunks for this file
+            // Clear old chunks for this file
             await db.chunks.where('filePath').equals(path).delete();
 
-            // 5. Chunk text
+            // Chunk text (Markdown-aware)
             const chunks = chunkText(fullText);
-            
-            // 6. Generate embeddings and save
+
+            // Generate embeddings and save, storing updatedAt for date filtering
             for (const text of chunks) {
                 const embedding = await generateEmbedding(text);
                 await db.chunks.add({
                     filePath: path,
                     content: text,
-                    embedding
+                    embedding,
+                    updatedAt: fileUpdatedAt,
                 });
             }
             console.log(`[RAG] Finished indexing ${path} (${chunks.length} chunks).`);
@@ -474,13 +476,17 @@ export class LocalStorageProvider implements StorageProvider {
         });
     }
 
-    async getKnowledgeContext(query?: string): Promise<string> {
+    async getKnowledgeContext(query?: string, options?: { updatedAfter?: number }): Promise<string> {
         if (query) {
             console.log(`[RAG] Performing Semantic Search for: "${query}"`);
             try {
                 const queryEmbedding = await generateEmbedding(query);
-                const allChunks = await db.chunks.toArray();
-                
+
+                // --- Metadata pre-filter: only load chunks within the date range ---
+                let allChunks = options?.updatedAfter
+                    ? await db.chunks.where('updatedAt').aboveOrEqual(options.updatedAfter).toArray()
+                    : await db.chunks.toArray();
+
                 if (allChunks.length === 0) {
                     return "--- Knowledge Base ---\nNo indexed memory found. Falling back to basic context.\n" + await this.getLegacyKnowledgeContext();
                 }
@@ -492,7 +498,6 @@ export class LocalStorageProvider implements StorageProvider {
                 })).sort((a, b) => b.similarity - a.similarity);
 
                 // FILENAME & TAG BOOSTING
-                // If the user explicitly mentions a file (e.g. "Schema Theory") or a #tag, we MUST include it regardless of vector score.
                 const queryLower = query.toLowerCase();
                 const boostedChunks: typeof ranked = [];
                 const seenChunkIds = new Set<string>();
@@ -501,72 +506,50 @@ export class LocalStorageProvider implements StorageProvider {
                 const tagMatches = query.match(/#([\w\-]+)/g) || [];
                 const queryTags = tagMatches.map(t => t.substring(1).toLowerCase());
 
-                // 1. Find matched files (by Name OR Tag)
-                // Use Dexie's index for tags if possible, or filter.
-                const taggedFiles: any[] = [];
-                if (queryTags.length > 0) {
-                     // OR logic for tags
-                     const uniqueTags = Array.from(new Set(queryTags));
-                     for (const t of uniqueTags) {
-                         // We need a way to search case-insensitive on tags array?
-                         // Dexie *tags index is case-sensitive by default usually unless locale.
-                         // For now, let's just iterate all files or use DB efficient search if possible.
-                         // Since we are iterating allFiles below anyway for filename match, let's combine.
-                     }
-                }
-
+                // Find matched files (by Tag OR Filename) — scoped to misc/ only
                 const allFiles = await db.files.toArray();
                 const matchedFiles = allFiles.filter(f => {
-                   if (!f.path.startsWith('misc/')) return false;
-                   const filename = f.path.split('/').pop()?.toLowerCase() || "";
-                   
-                   // A. Tag Match
-                   if (f.tags && f.tags.some(ft => queryTags.includes(ft.toLowerCase()))) {
-                       return true;
-                   }
+                    if (!f.path.startsWith('misc/')) return false;
+                    const filename = f.path.split('/').pop()?.toLowerCase() || '';
 
-                   // B. Filename Match
-                   // Boosting Logic: If filename is found in query OR query is found in filename
-                   // (ignoring very short queries)
-                   if (queryLower.length > 3 && filename.includes(queryLower)) return true;
-                   if (filename.length > 3 && queryLower.includes(filename)) return true;
-                   
-                   return false;
+                    // A. Tag match — wire up the *tags Dexie index via in-memory filter
+                    if (queryTags.length > 0 && f.tags && f.tags.some(ft => queryTags.includes(ft.toLowerCase()))) {
+                        return true;
+                    }
+
+                    // B. Filename match (bidirectional, min 4 chars to avoid noise)
+                    const filenameNoExt = filename.replace(/\.(md|txt|pdf)(\.source\.md)?$/i, '');
+                    if (queryLower.length > 3 && filenameNoExt.includes(queryLower)) return true;
+                    if (filenameNoExt.length > 3 && queryLower.includes(filenameNoExt)) return true;
+
+                    return false;
                 });
 
                 if (matchedFiles.length > 0) {
-                     console.log(`[RAG] Boosted Match Found: ${matchedFiles.map(f => f.path).join(', ')}`);
-                     // Get all chunks for these files
-                     for (const file of matchedFiles) {
-                         const fileChunks = allChunks.filter(c => c.filePath === file.path);
-                         for (const c of fileChunks) {
-                             if (!seenChunkIds.has(c.content)) { // simple content dedup
-                                 boostedChunks.push({ chunk: c, similarity: 1.0 }); // Artificially high score
-                                 seenChunkIds.add(c.content);
-                             }
-                         }
-                     }
+                    console.log(`[RAG] Boosted Match Found: ${matchedFiles.map(f => f.path).join(', ')}`);
+                    for (const file of matchedFiles) {
+                        const fileChunks = allChunks.filter(c => c.filePath === file.path);
+                        for (const c of fileChunks) {
+                            if (!seenChunkIds.has(c.content)) {
+                                boostedChunks.push({ chunk: c, similarity: 1.0 });
+                                seenChunkIds.add(c.content);
+                            }
+                        }
+                    }
                 }
 
-                // 2. Select Top Chunks (Boosted + Semantic)
+                // Select Top Chunks (Boosted + Semantic, total cap = 8)
                 const semanticChunks = ranked.filter(r => r.similarity > 0.1 && !seenChunkIds.has(r.chunk.content));
-                
-                // Combine: Boosted first, then highest semantic
-                // Total Limit: 8 chunks (approx 2k tokens)
                 const combined = [...boostedChunks, ...semanticChunks].slice(0, 8);
-                
+
                 if (combined.length === 0) {
                     return "--- Knowledge Base ---\nNo relevant files found for this query.\n";
                 }
 
                 let ctx = "--- Relevant Memory (Semantic Search) ---\n";
                 for (const item of combined) {
-                    // Normalize filename for the AI: remove path and extension
-                    // "misc/Research/Foo.pdf" -> "Foo"
-                    const rawName = item.chunk.filePath.split('/').pop() || "";
-                    const cleanName = rawName.replace(/\.(pdf|md|txt)(\.source\.md)?$/i, "");
-                    
-                    // Add [Boosted] tag for debug clarity if it was a filename match
+                    const rawName = item.chunk.filePath.split('/').pop() || '';
+                    const cleanName = rawName.replace(/\.(pdf|md|txt)(\.source\.md)?$/i, '');
                     const tag = item.similarity === 1.0 ? " (Exact Match)" : "";
                     ctx += `\n### Source: ${cleanName}${tag}\n${item.chunk.content}\n---\n`;
                 }

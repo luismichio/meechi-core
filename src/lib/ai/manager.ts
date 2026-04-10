@@ -74,7 +74,10 @@ ${systemContext}
         ];
 
         // 3. Attempt Chat
-        // We throw errors to let the client handle fallback (e.g. Local AI)
+        // [AUDIT] Trace:
+        console.debug('[AUDIT] AIManager.chat Provider:', primaryId);
+        console.debug('[AUDIT] AIManager.chat History Size:', history.length);
+
         return await provider.chat(
             providerConfig?.model || "",
             messages,

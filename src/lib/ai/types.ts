@@ -1,6 +1,7 @@
 export interface AIChatMessage {
     role: 'system' | 'user' | 'assistant';
     content: string;
+    timestamp?: number; // Unix ms — used for time-based context windowing
 }
 
 export interface AITool {
@@ -26,6 +27,7 @@ export interface AIProvider {
         model: string,
         messages: AIChatMessage[],
         tools?: AITool[],
-        apiKey?: string
+        apiKey?: string,
+        onChunk?: (token: string) => void
     ): Promise<AICompletion>;
 }

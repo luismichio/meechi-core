@@ -22,7 +22,8 @@ export interface FileChunk {
     id?: number;
     filePath: string;
     content: string;
-    embedding: number[]; // 512 dimensions (TensorFlow.js Universal Sentence Encoder)
+    embedding: number[]; // 512 dimensions (all-MiniLM-L6-v2)
+    updatedAt?: number;  // Unix ms — mirrors FileRecord.updatedAt for date filtering
 }
 
 export interface JournalEntry {
@@ -93,6 +94,11 @@ export class MeechiDB extends Dexie {
         // Add graph edges table in version 7
         this.version(7).stores({
             edges: 'id, source, target, relation'
+        });
+
+        // Add updatedAt index to chunks for date-based pre-filtering (Phase 1 RAG)
+        this.version(8).stores({
+            chunks: '++id, filePath, updatedAt'
         });
     }
 }
