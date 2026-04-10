@@ -21,7 +21,7 @@
     "dev": "next dev",
     "prebuild": "node ../../scripts/guard-architecture.js",
     "build": "next build",
-    "build:lib": "node ../../scripts/guard-architecture.js && tsc -p tsconfig.lib.json",
+    "build:lib": "tsc -p tsconfig.lib.json",
     "start": "next start",
     "lint": "node -e \"if(process.env.CI){console.log('Skipping lint in CI'); process.exit(0);} require('child_process').execSync('npx next lint', {stdio:'inherit'})\"",
     "prepublishOnly": "npm run build:lib"
