@@ -1,6 +1,6 @@
 {
   "name": "@meechi-ai/core",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "type": "module",
   "license": "AGPL-3.0-only",
   "main": "dist/index.js",
@@ -21,17 +21,19 @@
     "dev": "next dev",
     "prebuild": "node ../../scripts/guard-architecture.js",
     "build": "next build",
-    "build:lib": "tsc -p tsconfig.lib.json",
+    "build:lib": "node scripts/guard-standalone.js && tsc -p tsconfig.lib.json",
     "start": "next start",
     "lint": "node -e \"if(process.env.CI){console.log('Skipping lint in CI'); process.exit(0);} require('child_process').execSync('npx next lint', {stdio:'inherit'})\"",
     "prepublishOnly": "npm run build:lib"
   },
   "dependencies": {
     "@mlc-ai/web-llm": "^0.2.80",
+    "@tiptap/core": "^2.11.2",
     "@tiptap/extension-bubble-menu": "^3.14.0",
     "@tiptap/extension-color": "^3.14.0",
     "@tiptap/extension-floating-menu": "^3.14.0",
     "@tiptap/extension-highlight": "^3.14.0",
+    "@tiptap/extension-link": "^2.11.2",
     "@tiptap/extension-placeholder": "^3.14.0",
     "@tiptap/extension-text-style": "^3.14.0",
     "@tiptap/pm": "^3.14.0",

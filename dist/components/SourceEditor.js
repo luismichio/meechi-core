@@ -1,21 +1,13 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useEditor, EditorContent } from '@tiptap/react';
-import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { Markdown } from 'tiptap-markdown';
 import Placeholder from '@tiptap/extension-placeholder';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import Link from '@tiptap/extension-link';
-import React, { useEffect } from 'react';
-
-interface SourceEditorProps {
-    file: { content: string; path: string; metadata?: any };
-    isEditing: boolean;
-    onSave?: (content: string) => void;
-    onRenderExtension?: (editor: Editor) => React.ReactNode;
-}
-
-export default function SourceEditor({ file, isEditing, onSave, onRenderExtension }: SourceEditorProps) {
+import { useEffect } from 'react';
+export default function SourceEditor({ file, isEditing, onSave, onRenderExtension }) {
     const editor = useEditor({
         extensions: [
             StarterKit,
@@ -35,7 +27,7 @@ export default function SourceEditor({ file, isEditing, onSave, onRenderExtensio
         ],
         content: file.content,
         editable: isEditing,
-        onUpdate: ({ editor }: { editor: Editor }) => {
+        onUpdate: ({ editor }) => {
             // Optional: Auto-save or debounce logic
         },
         editorProps: {
@@ -44,28 +36,15 @@ export default function SourceEditor({ file, isEditing, onSave, onRenderExtensio
             }
         }
     });
-
     // Sync content if file changes externally
     useEffect(() => {
-        if (editor && file.content !== (editor.storage as any).markdown.getMarkdown()) {
-             editor.commands.setContent(file.content);
+        if (editor && file.content !== editor.storage.markdown.getMarkdown()) {
+            editor.commands.setContent(file.content);
         }
     }, [file.path, editor]);
-
     // Save on Unmount or explicit save
     // (Simplified for now)
-
-    if (!editor) return null;
-
-    return (
-        <div className="source-editor">
-            {/* Toolbar Area (Generic + Slot) */}
-            <div className="toolbar" style={{ padding: '0.5rem', borderBottom: '1px solid #eee' }}>
-                 {/* Basic Buttons could go here */}
-                 {onRenderExtension && onRenderExtension(editor)}
-            </div>
-            
-            <EditorContent editor={editor} style={{ padding: '1rem' }} />
-        </div>
-    );
+    if (!editor)
+        return null;
+    return (_jsxs("div", { className: "source-editor", children: [_jsx("div", { className: "toolbar", style: { padding: '0.5rem', borderBottom: '1px solid #eee' }, children: onRenderExtension && onRenderExtension(editor) }), _jsx(EditorContent, { editor: editor, style: { padding: '1rem' } })] }));
 }
