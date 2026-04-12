@@ -24,7 +24,7 @@
     "build:lib": "node scripts/guard-standalone.js && tsc -p tsconfig.lib.json",
     "start": "next start",
     "lint": "node -e \"if(process.env.CI){console.log('Skipping lint in CI'); process.exit(0);} require('child_process').execSync('npx next lint', {stdio:'inherit'})\"",
-    "prepublishOnly": "yarn build:lib"
+    "prepublishOnly": "node .yarn/releases/yarn-4.6.0.cjs build:lib"
   },
   "dependencies": {
     "@mlc-ai/web-llm": "^0.2.80",
